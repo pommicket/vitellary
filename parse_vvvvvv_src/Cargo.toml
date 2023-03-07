@@ -1,0 +1,9 @@
+[package]
+name = "parse_vvvvvv_src"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0.69"
+git2 = "0.16.1"
