@@ -1,22 +1,17 @@
-use crate::game::State;
+use crate::game::{Revision, State};
+use std::mem::size_of;
 use std::time::Duration;
 use zerocopy::FromBytes;
 
 #[derive(Debug, FromBytes)]
 #[repr(C)]
 pub(super) struct GameObject {
-    _unused1: [u8; 0x18], // 0x00
-    room_x: u32,          // 0x18
-    room_y: u32,          // 0x1c
-    _unused2: [u8; 0x3c], // 0x20
-    state: u32,           // 0x5c
-    _unused3: [u8; 0x08], // 0x60
-    gamestate: u32,       // 0x68
-    _unused4: [u8; 0x38], // 0x6c
-    timer: Timer<u32>,    // 0xa4
+    room_x: u32,
+    room_y: u32,
+    state: u32,
+    gamestate: u32,
+    timer: Timer<u32>,
 }
-pub(super) const GAME_OBJECT_SIZE: usize = std::mem::size_of::<GameObject>();
-const _: () = assert!(GAME_OBJECT_SIZE == 0xa4 + 16);
 
 impl GameObject {
     pub(super) fn into_state(self) -> (State, Duration) {
@@ -31,10 +26,22 @@ impl GameObject {
         )
     }
 }
-
-impl From<[u8; GAME_OBJECT_SIZE]> for GameObject {
-    fn from(buf: [u8; GAME_OBJECT_SIZE]) -> Self {
-        zerocopy::transmute!(buf)
+impl GameObject {
+    /// parse revision from bytes
+    ///
+    /// panicks if `Some(bytes.len()) != revision.game_object_size()`.
+    pub(super) fn from_bytes(revision: &Revision, bytes: &[u8]) -> Self {
+        fn read_object<T: FromBytes>(bytes: &[u8], offset: usize) -> T {
+            T::read_from(&bytes[offset..offset + size_of::<T>()]).expect("bad game object")
+        }
+        assert_eq!(bytes.len(), revision.game_object_size());
+        Self {
+            timer: read_object(bytes, revision.timer_offset),
+            gamestate: read_object(bytes, revision.gamestate_offset),
+            room_x: read_object(bytes, revision.room_x_offset),
+            room_y: read_object(bytes, revision.room_y_offset),
+            state: read_object(bytes, revision.state_offset),
+        }
     }
 }
 

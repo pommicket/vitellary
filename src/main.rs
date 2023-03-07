@@ -3,7 +3,8 @@
 
 mod game;
 
-use crate::game::{Game, Update};
+use crate::game::{Game, Revision, Update};
+use anyhow::anyhow;
 use anyhow::{bail, Context, Result};
 use argh::FromArgs;
 use env_logger::Env;
@@ -27,6 +28,12 @@ struct Args {
     #[argh(option)]
     bind: Option<SocketAddr>,
 
+    /// which revision of VVVVVV you have
+    ///
+    /// this can be a version number (e.g. "2.3") or a commit ID (e.g. "48cddf57a67a90be0b6f6d8a780f766ca15942a7").
+    #[argh(option, default = "String::from(\"master\")")]
+    revision: String,
+
     /// process ID of a specific VVVVVV process
     #[argh(positional)]
     pid: Option<Pid>,
@@ -40,6 +47,8 @@ fn main() -> Result<()> {
         "vitellary=info"
     }))
     .init();
+
+    let revision = Revision::get(&args.revision).ok_or_else(|| anyhow!("no such revision"))?;
 
     let pid = if let Some(pid) = args.pid {
         pid
@@ -105,7 +114,7 @@ fn main() -> Result<()> {
     });
 
     loop {
-        sender.try_send(game.update()?).ok();
+        sender.try_send(game.update(revision)?).ok();
         std::thread::sleep(Duration::from_millis(10));
     }
 }

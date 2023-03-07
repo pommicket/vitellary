@@ -1,7 +1,7 @@
 #![cfg(target_os = "linux")]
 
-use crate::game::common::{GameObject, GAME_OBJECT_SIZE};
-use crate::game::State;
+use crate::game::common::GameObject;
+use crate::game::{Revision, State};
 use anyhow::{anyhow, Result};
 use read_process_memory::{CopyAddress, Pid, ProcessHandle};
 use std::process::Command;
@@ -54,8 +54,8 @@ pub(super) fn find_game_object(pid: Pid) -> Result<Handle> {
     })
 }
 
-pub(super) fn read_game_object(handle: &Handle) -> Result<(State, Duration)> {
-    let mut buf = [0; GAME_OBJECT_SIZE];
+pub(super) fn read_game_object(handle: &Handle, revision: &Revision) -> Result<(State, Duration)> {
+    let mut buf = vec![0; revision.game_object_size()];
     handle.process.copy_address(handle.address, &mut buf)?;
-    Ok(GameObject::from(buf).into_state())
+    Ok(GameObject::from_bytes(revision, &buf).into_state())
 }

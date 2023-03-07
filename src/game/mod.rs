@@ -1,6 +1,7 @@
 mod common;
 mod linux;
 mod macos;
+mod revisions;
 
 #[cfg(target_os = "linux")]
 use linux as imp;
@@ -10,10 +11,45 @@ use macos as imp;
 use anyhow::Result;
 use debug_ignore::DebugIgnore;
 use read_process_memory::Pid;
+use std::collections::HashMap;
 use std::ops::RangeInclusive;
+use std::sync::Once;
 use std::time::Duration;
 
-const PLAYING_STATES: [u32; 3] = [0, 4, 5];
+pub struct Revision {
+    game_object_size: usize,
+    room_x_offset: usize,
+    room_y_offset: usize,
+    state_offset: usize,
+    gamestate_offset: usize,
+    timer_offset: usize,
+    playing_states: Vec<u32>,
+}
+
+impl Revision {
+    pub fn get(name: &str) -> Option<&'static Self> {
+        // ugh rust doesnt support const HashMaps or Vecs
+        static mut REVISIONS: Option<HashMap<&'static str, Revision>> = None;
+        static REVISIONS_ONCE: Once = Once::new();
+        REVISIONS_ONCE.call_once(|| {
+            // SAFETY: we only access REVISIONS here and below
+            unsafe { REVISIONS = Some(revisions::get()) }
+        });
+        // SAFETY: we only modify REVISIONS in the Once above
+        unsafe { REVISIONS.as_ref() }.unwrap().get(name)
+    }
+
+    pub(super) fn game_object_size(&self) -> usize {
+        self.game_object_size
+    }
+}
+
+impl Revision {
+    fn is_playing_state(&self, state: u32) -> bool {
+        self.playing_states.contains(&state)
+    }
+}
+
 const SPLITS: [(Event, RangeInclusive<u32>); 8] = [
     (Event::Verdigris, 3006..=3011),
     (Event::Vermilion, 3060..=3065),
@@ -80,8 +116,8 @@ impl Game {
         })
     }
 
-    pub(crate) fn update(&mut self) -> Result<Update> {
-        let (state, time) = imp::read_game_object(&self.handle)?;
+    pub(crate) fn update(&mut self, revision: &Revision) -> Result<Update> {
+        let (state, time) = imp::read_game_object(&self.handle, revision)?;
         if self.old.state == u32::MAX {
             self.old = state.clone();
             self.cur = state;
@@ -114,16 +150,16 @@ impl Game {
             );
         }
 
-        if PLAYING_STATES.contains(&self.cur.gamestate)
-            && !PLAYING_STATES.contains(&self.old.gamestate)
+        if revision.is_playing_state(self.cur.gamestate)
+            && !revision.is_playing_state(self.old.gamestate)
         {
             return Ok(Update {
                 time: Duration::ZERO,
                 event: Some(Event::NewGame),
             });
         }
-        if !PLAYING_STATES.contains(&self.cur.gamestate)
-            && PLAYING_STATES.contains(&self.old.gamestate)
+        if !revision.is_playing_state(self.cur.gamestate)
+            && revision.is_playing_state(self.old.gamestate)
         {
             return Ok(Update {
                 time,
