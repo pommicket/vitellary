@@ -166,19 +166,22 @@ impl Game {
                 event: Some(Event::Reset),
             });
         }
-
+        
         // `state` increments to 3006 prior to the switch case that jumps to the correct state. This
         // can cause `Event::Verdigris` to fire one cycle before the correct event. Check we're in
-        // the right room ("Murdering Twinmaker" @ (115, 100)) and enforce no event if we're not.
-        let event = if self.cur.state == 3006 && self.cur.room != (115, 100) {
-            log::debug!("ignoring state 3006");
-            None
-        } else {
-            SPLITS.into_iter().find_map(|(event, range)| {
-                (range.contains(&self.cur.state) && !range.contains(&self.old.state))
-                    .then_some(event)
-            })
-        };
+        // the right room ("Murdering Twinmaker" @ (115, 100)) or (Untitled @ (113, 102)) (telejump)
+        // and enforce no event if we're not.
+        let event =
+            if self.cur.state == 3006 && self.cur.room != (115, 100) && self.cur.room != (113, 102)
+            {
+                log::debug!("ignoring state 3006");
+                None
+            } else {
+                SPLITS.into_iter().find_map(|(event, range)| {
+                    (range.contains(&self.cur.state) && !range.contains(&self.old.state))
+                        .then_some(event)
+                })
+            };
 
         Ok(Update { time, event })
     }
